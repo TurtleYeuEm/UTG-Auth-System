@@ -86,54 +86,230 @@ async def on_ready():
 async def ban(ctx, userid: str):
     """Ban UserID - Usage: !ban 123456789"""
     try:
+        # Validate UserID
+        if not userid.isdigit():
+            await ctx.send("❌ UserID phải là số!")
+            return
+        
+        # Get current blacklist
         data = get_blacklist()
         
+        # Check if already banned
         if userid in data['userids']:
             await ctx.send(f"❌ UserID `{userid}` đã bị ban rồi!")
             return
         
-        data['userids'].append(userid)
-        update_github_file('blacklist.json', json.dumps(data, indent=2))
+        # Get Roblox user info
+        try:
+            user_response = requests.get(f"https://users.roblox.com/v1/users/{userid}", timeout=5)
+            user_data = user_response.json()
+            
+            if 'name' in user_data:
+                username = user_data['name']
+                display_name = user_data.get('displayName', username)
+                avatar_url = f"https://www.roblox.com/headshot-thumbnail/image?userId={userid}&width=420&height=420&format=png"
+            else:
+                username = f"Unknown User ({userid})"
+                display_name = username
+                avatar_url = None
+                
+        except:
+            username = f"Unknown User ({userid})"
+            display_name = username
+            avatar_url = None
         
-        embed = discord.Embed(
+        # Send confirmation message
+        confirm_embed = discord.Embed(
+            title="⚠️ Xác nhận Ban User",
+            description=f"Bạn có chắc muốn ban user này?",
+            color=0xff9900,
+            timestamp=datetime.utcnow()
+        )
+        confirm_embed.add_field(name="👤 Username", value=username, inline=True)
+        confirm_embed.add_field(name="📱 Display Name", value=display_name, inline=True)
+        confirm_embed.add_field(name="🆔 UserID", value=userid, inline=True)
+        
+        if avatar_url:
+            confirm_embed.set_thumbnail(url=avatar_url)
+        
+        confirm_embed.set_footer(text="React ✅ để xác nhận, ❌ để hủy (30s)")
+        
+        confirm_msg = await ctx.send(embed=confirm_embed)
+        
+        # Add reactions
+        await confirm_msg.add_reaction('✅')
+        await confirm_msg.add_reaction('❌')
+        
+        # Wait for reaction
+        def check(reaction, user):
+            return user == ctx.author and str(reaction.emoji) in ['✅', '❌'] and reaction.message.id == confirm_msg.id
+        
+        try:
+            reaction, user = await bot.wait_for('reaction_add', timeout=30.0, check=check)
+            
+            if str(reaction.emoji) == '❌':
+                cancel_embed = discord.Embed(
+                    title="🚫 Đã Hủy",
+                    description="Hủy ban user",
+                    color=0x95a5a6
+                )
+                await confirm_msg.edit(embed=cancel_embed)
+                await confirm_msg.clear_reactions()
+                return
+                
+        except:
+            timeout_embed = discord.Embed(
+                title="⏱️ Hết Thời Gian",
+                description="Không có phản hồi sau 30 giây",
+                color=0x95a5a6
+            )
+            await confirm_msg.edit(embed=timeout_embed)
+            await confirm_msg.clear_reactions()
+            return
+        
+        # User confirmed, proceed with ban
+        data['userids'].append(userid)
+        success = update_github_file('blacklist.json', json.dumps(data, indent=2))
+        
+        if not success:
+            await ctx.send(f"❌ Không thể cập nhật GitHub! Check bot logs.")
+            return
+        
+        # Send success message
+        success_embed = discord.Embed(
             title="🔨 User Banned",
-            description=f"UserID **{userid}** đã bị ban khỏi script",
+            description=f"**{username}** đã bị ban khỏi script",
             color=0xff0000,
             timestamp=datetime.utcnow()
         )
-        embed.add_field(name="Banned UserID", value=userid, inline=True)
-        embed.add_field(name="Total Bans", value=str(len(data['userids'])), inline=True)
-        embed.set_footer(text="UTG Anti-Cheat System")
-        await ctx.send(embed=embed)
+        success_embed.add_field(name="👤 Username", value=username, inline=True)
+        success_embed.add_field(name="📱 Display Name", value=display_name, inline=True)
+        success_embed.add_field(name="🆔 UserID", value=userid, inline=True)
+        success_embed.add_field(name="📊 Total Bans", value=str(len(data['userids'])), inline=False)
+        success_embed.set_footer(text=f"Banned by {ctx.author.name}")
+        
+        if avatar_url:
+            success_embed.set_thumbnail(url=avatar_url)
+        
+        await confirm_msg.edit(embed=success_embed)
+        await confirm_msg.clear_reactions()
         
     except Exception as e:
         await ctx.send(f"❌ Lỗi: {str(e)}")
+        print(f"Ban command error: {str(e)}")
 
 @bot.command()
 async def unban(ctx, userid: str):
     """Unban UserID - Usage: !unban 123456789"""
     try:
+        # Validate UserID
+        if not userid.isdigit():
+            await ctx.send("❌ UserID phải là số!")
+            return
+        
+        # Get current blacklist
         data = get_blacklist()
         
+        # Check if banned
         if userid not in data['userids']:
             await ctx.send(f"❌ UserID `{userid}` không bị ban!")
             return
         
-        data['userids'].remove(userid)
-        update_github_file('blacklist.json', json.dumps(data, indent=2))
+        # Get Roblox user info
+        try:
+            user_response = requests.get(f"https://users.roblox.com/v1/users/{userid}", timeout=5)
+            user_data = user_response.json()
+            
+            if 'name' in user_data:
+                username = user_data['name']
+                display_name = user_data.get('displayName', username)
+                avatar_url = f"https://www.roblox.com/headshot-thumbnail/image?userId={userid}&width=420&height=420&format=png"
+            else:
+                username = f"Unknown User ({userid})"
+                display_name = username
+                avatar_url = None
+                
+        except:
+            username = f"Unknown User ({userid})"
+            display_name = username
+            avatar_url = None
         
-        embed = discord.Embed(
+        # Send confirmation
+        confirm_embed = discord.Embed(
+            title="⚠️ Xác nhận Unban User",
+            description=f"Bạn có chắc muốn unban user này?",
+            color=0xff9900,
+            timestamp=datetime.utcnow()
+        )
+        confirm_embed.add_field(name="👤 Username", value=username, inline=True)
+        confirm_embed.add_field(name="📱 Display Name", value=display_name, inline=True)
+        confirm_embed.add_field(name="🆔 UserID", value=userid, inline=True)
+        
+        if avatar_url:
+            confirm_embed.set_thumbnail(url=avatar_url)
+        
+        confirm_embed.set_footer(text="React ✅ để xác nhận, ❌ để hủy (30s)")
+        
+        confirm_msg = await ctx.send(embed=confirm_embed)
+        await confirm_msg.add_reaction('✅')
+        await confirm_msg.add_reaction('❌')
+        
+        # Wait for reaction
+        def check(reaction, user):
+            return user == ctx.author and str(reaction.emoji) in ['✅', '❌'] and reaction.message.id == confirm_msg.id
+        
+        try:
+            reaction, user = await bot.wait_for('reaction_add', timeout=30.0, check=check)
+            
+            if str(reaction.emoji) == '❌':
+                cancel_embed = discord.Embed(
+                    title="🚫 Đã Hủy",
+                    description="Hủy unban user",
+                    color=0x95a5a6
+                )
+                await confirm_msg.edit(embed=cancel_embed)
+                await confirm_msg.clear_reactions()
+                return
+                
+        except:
+            timeout_embed = discord.Embed(
+                title="⏱️ Hết Thời Gian",
+                description="Không có phản hồi sau 30 giây",
+                color=0x95a5a6
+            )
+            await confirm_msg.edit(embed=timeout_embed)
+            await confirm_msg.clear_reactions()
+            return
+        
+        # Proceed with unban
+        data['userids'].remove(userid)
+        success = update_github_file('blacklist.json', json.dumps(data, indent=2))
+        
+        if not success:
+            await ctx.send(f"❌ Không thể cập nhật GitHub! Check bot logs.")
+            return
+        
+        # Success message
+        success_embed = discord.Embed(
             title="✅ User Unbanned",
-            description=f"UserID **{userid}** đã được unban",
+            description=f"**{username}** đã được unban",
             color=0x00ff00,
             timestamp=datetime.utcnow()
         )
-        embed.add_field(name="Unbanned UserID", value=userid, inline=True)
-        embed.set_footer(text="UTG Anti-Cheat System")
-        await ctx.send(embed=embed)
+        success_embed.add_field(name="👤 Username", value=username, inline=True)
+        success_embed.add_field(name="📱 Display Name", value=display_name, inline=True)
+        success_embed.add_field(name="🆔 UserID", value=userid, inline=True)
+        success_embed.set_footer(text=f"Unbanned by {ctx.author.name}")
+        
+        if avatar_url:
+            success_embed.set_thumbnail(url=avatar_url)
+        
+        await confirm_msg.edit(embed=success_embed)
+        await confirm_msg.clear_reactions()
         
     except Exception as e:
         await ctx.send(f"❌ Lỗi: {str(e)}")
+        print(f"Unban command error: {str(e)}")
 
 @bot.command()
 async def banlist(ctx):
