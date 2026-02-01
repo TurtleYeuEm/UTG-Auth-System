@@ -13,28 +13,69 @@ GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 
 def update_github_file(filename, content):
     """Update file on GitHub"""
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filename}"
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-    
-    response = requests.get(url, headers=headers)
-    sha = response.json().get('sha')
-    
-    data = {
-        "message": f"Update {filename} via Discord Bot",
-        "content": base64.b64encode(content.encode()).decode(),
-        "sha": sha
-    }
-    
-    return requests.put(url, headers=headers, json=data)
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filename}"
+        headers = {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        
+        # Get current file
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        file_data = response.json()
+        sha = file_data.get('sha')
+        
+        if not sha:
+            print("❌ No SHA found in response")
+            return False
+        
+        # Update file
+        data = {
+            "message": f"Update {filename} via Discord Bot",
+            "content": base64.b64encode(content.encode()).decode(),
+            "sha": sha
+        }
+        
+        update_response = requests.put(url, headers=headers, json=data, timeout=10)
+        update_response.raise_for_status()
+        
+        print(f"✅ Updated {filename} successfully")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error updating {filename}: {str(e)}")
+        return False
 
 def get_blacklist():
     """Get blacklist from GitHub"""
-    url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/blacklist.json"
-    response = requests.get(url)
-    return json.loads(response.text)
+    try:
+        url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/blacklist.json"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        # Remove BOM if exists
+        text = response.text
+        if text.startswith('\ufeff'):
+            text = text[1:]
+        
+        # Parse JSON
+        data = json.loads(text)
+        
+        # Ensure userids exists
+        if 'userids' not in data:
+            data['userids'] = []
+        
+        return data
+        
+    except json.JSONDecodeError as e:
+        print(f"❌ JSON decode error: {str(e)}")
+        print(f"Response text: {response.text[:200]}")
+        return {"userids": []}
+    except Exception as e:
+        print(f"❌ Error getting blacklist: {str(e)}")
+        return {"userids": []}
 
 @bot.event
 async def on_ready():
