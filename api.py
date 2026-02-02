@@ -15,13 +15,14 @@ def home():
 def get_blacklist():
     """Get blacklist for Roblox"""
     try:
-        url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/blacklist.json"
+        import time
+        url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/blacklist.json?t={int(time.time())}"
+        
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         
         data = json.loads(response.text)
         
-        # Return in simple format for Roblox
         return jsonify({
             "success": True,
             "userids": data.get('userids', [])
@@ -38,7 +39,9 @@ def get_blacklist():
 def check_user(userid):
     """Check if user is banned"""
     try:
-        url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/blacklist.json"
+        import time
+        url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/blacklist.json?t={int(time.time())}"
+        
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         
