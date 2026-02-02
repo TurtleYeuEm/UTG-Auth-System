@@ -77,9 +77,17 @@ def update_github_file(filename, content):
 def get_blacklist():
     """Get blacklist from GitHub"""
     try:
-        url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/blacklist.json"
+        # Add timestamp to bypass cache
+        import time
+        url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/blacklist.json?t={int(time.time())}"
+        
+        print(f"📥 Getting blacklist from: {url}")
+        
         response = requests.get(url, timeout=10)
         response.raise_for_status()
+        
+        print(f"📄 Response status: {response.status_code}")
+        print(f"📄 Response text: {response.text[:200]}")
         
         # Remove BOM if exists
         text = response.text
@@ -88,19 +96,24 @@ def get_blacklist():
         
         # Parse JSON
         data = json.loads(text)
+        print(f"✅ Parsed data: {data}")
         
         # Ensure userids exists
         if 'userids' not in data:
             data['userids'] = []
         
+        print(f"📊 Current banned users: {data['userids']}")
+        
         return data
         
     except json.JSONDecodeError as e:
         print(f"❌ JSON decode error: {str(e)}")
-        print(f"Response text: {response.text[:200]}")
+        print(f"Response text: {response.text}")
         return {"userids": []}
     except Exception as e:
         print(f"❌ Error getting blacklist: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {"userids": []}
 
 @bot.event
@@ -388,6 +401,70 @@ async def banlist(ctx):
         
     except Exception as e:
         await ctx.send(f"❌ Lỗi: {str(e)}")
+
+@bot.command()
+async def testgithub(ctx):
+    """Test GitHub connection và permissions"""
+    try:
+        embed = discord.Embed(
+            title="🧪 GitHub Connection Test",
+            color=0x3498db
+        )
+        
+        # Check env vars
+        embed.add_field(
+            name="🔑 Environment Variables",
+            value=f"GITHUB_REPO: `{GITHUB_REPO or 'NOT SET'}`\nGITHUB_TOKEN: `{'SET' if GITHUB_TOKEN else 'NOT SET'}`",
+            inline=False
+        )
+        
+        # Test read blacklist
+        try:
+            data = get_blacklist()
+            embed.add_field(
+                name="📥 Read Blacklist",
+                value=f"✅ Success\nBanned users: {len(data.get('userids', []))}",
+                inline=False
+            )
+        except Exception as e:
+            embed.add_field(
+                name="📥 Read Blacklist",
+                value=f"❌ Failed: {str(e)}",
+                inline=False
+            )
+        
+        # Test GitHub API
+        try:
+            url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/blacklist.json"
+            headers = {
+                "Authorization": f"token {GITHUB_TOKEN}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                embed.add_field(
+                    name="🔗 GitHub API",
+                    value=f"✅ Connected (Status: {response.status_code})",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="🔗 GitHub API",
+                    value=f"❌ Failed (Status: {response.status_code})\n{response.text[:100]}",
+                    inline=False
+                )
+        except Exception as e:
+            embed.add_field(
+                name="🔗 GitHub API",
+                value=f"❌ Error: {str(e)}",
+                inline=False
+            )
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        await ctx.send(f"❌ Test failed: {str(e)}")
 
 @bot.command()
 async def commands(ctx):
