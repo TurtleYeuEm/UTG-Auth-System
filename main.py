@@ -20,16 +20,26 @@ def update_github_file(filename, content):
             "Accept": "application/vnd.github.v3+json"
         }
         
+        print(f"🔄 Updating {filename}...")
+        print(f"📂 Repo: {GITHUB_REPO}")
+        print(f"🔑 Token exists: {bool(GITHUB_TOKEN)}")
+        
         # Get current file
         response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
+        print(f"📥 GET response: {response.status_code}")
+        
+        if response.status_code != 200:
+            print(f"❌ Failed to get file: {response.text}")
+            return False
         
         file_data = response.json()
         sha = file_data.get('sha')
         
         if not sha:
-            print("❌ No SHA found in response")
+            print("❌ No SHA in response")
             return False
+        
+        print(f"✅ Got SHA: {sha[:10]}...")
         
         # Update file
         data = {
@@ -37,6 +47,22 @@ def update_github_file(filename, content):
             "content": base64.b64encode(content.encode()).decode(),
             "sha": sha
         }
+        
+        update_response = requests.put(url, headers=headers, json=data, timeout=10)
+        print(f"📤 PUT response: {update_response.status_code}")
+        
+        if update_response.status_code in [200, 201]:
+            print(f"✅ Successfully updated {filename}")
+            return True
+        else:
+            print(f"❌ Failed to update: {update_response.text}")
+            return False
+        
+    except Exception as e:
+        print(f"❌ Exception in update_github_file: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return False
         
         update_response = requests.put(url, headers=headers, json=data, timeout=10)
         update_response.raise_for_status()
@@ -100,23 +126,26 @@ async def ban(ctx, userid: str):
             return
         
         # Get Roblox user info
+        username = f"User {userid}"
+        display_name = username
+        avatar_url = None
+        
         try:
+            # Get username
             user_response = requests.get(f"https://users.roblox.com/v1/users/{userid}", timeout=5)
-            user_data = user_response.json()
-            
-            if 'name' in user_data:
-                username = user_data['name']
+            if user_response.status_code == 200:
+                user_data = user_response.json()
+                username = user_data.get('name', f"User {userid}")
                 display_name = user_data.get('displayName', username)
-                avatar_url = f"https://www.roblox.com/headshot-thumbnail/image?userId={userid}&width=420&height=420&format=png"
-            else:
-                username = f"Unknown User ({userid})"
-                display_name = username
-                avatar_url = None
-                
-        except:
-            username = f"Unknown User ({userid})"
-            display_name = username
-            avatar_url = None
+            
+            # Get avatar
+            avatar_response = requests.get(f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={userid}&size=420x420&format=Png", timeout=5)
+            if avatar_response.status_code == 200:
+                avatar_data = avatar_response.json()
+                if avatar_data.get('data') and len(avatar_data['data']) > 0:
+                    avatar_url = avatar_data['data'][0].get('imageUrl')
+        except Exception as e:
+            print(f"⚠️ Failed to get user info: {e}")
         
         # Send confirmation message
         confirm_embed = discord.Embed(
@@ -157,7 +186,7 @@ async def ban(ctx, userid: str):
                 await confirm_msg.clear_reactions()
                 return
                 
-        except:
+        except Exception:
             timeout_embed = discord.Embed(
                 title="⏱️ Hết Thời Gian",
                 description="Không có phản hồi sau 30 giây",
@@ -168,11 +197,19 @@ async def ban(ctx, userid: str):
             return
         
         # User confirmed, proceed with ban
+        print(f"🔨 Banning user {userid}...")
         data['userids'].append(userid)
+        
         success = update_github_file('blacklist.json', json.dumps(data, indent=2))
         
         if not success:
-            await ctx.send(f"❌ Không thể cập nhật GitHub! Check bot logs.")
+            error_embed = discord.Embed(
+                title="❌ Lỗi",
+                description="Không thể cập nhật GitHub!\nCheck Railway logs để xem chi tiết.",
+                color=0xff0000
+            )
+            await confirm_msg.edit(embed=error_embed)
+            await confirm_msg.clear_reactions()
             return
         
         # Send success message
@@ -196,7 +233,9 @@ async def ban(ctx, userid: str):
         
     except Exception as e:
         await ctx.send(f"❌ Lỗi: {str(e)}")
-        print(f"Ban command error: {str(e)}")
+        print(f"❌ Ban command error: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 @bot.command()
 async def unban(ctx, userid: str):
@@ -216,23 +255,24 @@ async def unban(ctx, userid: str):
             return
         
         # Get Roblox user info
+        username = f"User {userid}"
+        display_name = username
+        avatar_url = None
+        
         try:
             user_response = requests.get(f"https://users.roblox.com/v1/users/{userid}", timeout=5)
-            user_data = user_response.json()
-            
-            if 'name' in user_data:
-                username = user_data['name']
+            if user_response.status_code == 200:
+                user_data = user_response.json()
+                username = user_data.get('name', f"User {userid}")
                 display_name = user_data.get('displayName', username)
-                avatar_url = f"https://www.roblox.com/headshot-thumbnail/image?userId={userid}&width=420&height=420&format=png"
-            else:
-                username = f"Unknown User ({userid})"
-                display_name = username
-                avatar_url = None
-                
-        except:
-            username = f"Unknown User ({userid})"
-            display_name = username
-            avatar_url = None
+            
+            avatar_response = requests.get(f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={userid}&size=420x420&format=Png", timeout=5)
+            if avatar_response.status_code == 200:
+                avatar_data = avatar_response.json()
+                if avatar_data.get('data') and len(avatar_data['data']) > 0:
+                    avatar_url = avatar_data['data'][0].get('imageUrl')
+        except Exception as e:
+            print(f"⚠️ Failed to get user info: {e}")
         
         # Send confirmation
         confirm_embed = discord.Embed(
@@ -271,7 +311,7 @@ async def unban(ctx, userid: str):
                 await confirm_msg.clear_reactions()
                 return
                 
-        except:
+        except Exception:
             timeout_embed = discord.Embed(
                 title="⏱️ Hết Thời Gian",
                 description="Không có phản hồi sau 30 giây",
@@ -282,11 +322,19 @@ async def unban(ctx, userid: str):
             return
         
         # Proceed with unban
+        print(f"✅ Unbanning user {userid}...")
         data['userids'].remove(userid)
+        
         success = update_github_file('blacklist.json', json.dumps(data, indent=2))
         
         if not success:
-            await ctx.send(f"❌ Không thể cập nhật GitHub! Check bot logs.")
+            error_embed = discord.Embed(
+                title="❌ Lỗi",
+                description="Không thể cập nhật GitHub!\nCheck Railway logs để xem chi tiết.",
+                color=0xff0000
+            )
+            await confirm_msg.edit(embed=error_embed)
+            await confirm_msg.clear_reactions()
             return
         
         # Success message
@@ -309,7 +357,9 @@ async def unban(ctx, userid: str):
         
     except Exception as e:
         await ctx.send(f"❌ Lỗi: {str(e)}")
-        print(f"Unban command error: {str(e)}")
+        print(f"❌ Unban command error: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 @bot.command()
 async def banlist(ctx):
