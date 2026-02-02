@@ -467,6 +467,23 @@ async def testgithub(ctx):
         await ctx.send(f"❌ Test failed: {str(e)}")
 
 @bot.command()
+async def checkfile(ctx):
+    """Check raw blacklist.json content"""
+    try:
+        import time
+        url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/blacklist.json?t={int(time.time())}"
+        response = requests.get(url, timeout=10)
+        
+        await ctx.send(f"**Raw content:**\n```json\n{response.text}\n```")
+        
+        # Try to parse
+        data = json.loads(response.text)
+        await ctx.send(f"**Parsed:**\n```python\n{data}\n```")
+        
+    except Exception as e:
+        await ctx.send(f"❌ Error: {str(e)}")
+
+@bot.command()
 async def commands(ctx):
     """Show all commands"""
     embed = discord.Embed(
