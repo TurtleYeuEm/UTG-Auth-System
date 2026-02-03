@@ -116,6 +116,39 @@ def get_blacklist():
         traceback.print_exc()
         return {"userids": []}
 
+def get_blacklist():
+    """Get blacklist from GitHub"""
+    try:
+        import time
+        url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/blacklist.json?t={int(time.time())}"
+        
+        headers = {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        print(f"📄 Response: {response.text}")
+        
+        text = response.text.strip()
+        if text.startswith('\ufeff'):
+            text = text[1:]
+        
+        data = json.loads(text)
+        
+        if 'userids' not in data:
+            data['userids'] = []
+        
+        print(f"✅ Loaded {len(data['userids'])} banned users")
+        
+        return data
+        
+    except Exception as e:
+        print(f"❌ Error: {str(e)}")
+        return {"userids": []}
+
 @bot.event
 async def on_ready():
     print(f'✅ Bot is online: {bot.user}')
@@ -376,10 +409,10 @@ async def unban(ctx, userid: str):
 
 @bot.command()
 async def banlist(ctx):
-    """Xem danh sách bị ban"""
+    """Xem danh sách bị ban với tên"""
     try:
         data = get_blacklist()
-        userids = data['userids']
+        userids = data.get('userids', [])
         
         if not userids:
             embed = discord.Embed(
@@ -388,19 +421,43 @@ async def banlist(ctx):
                 color=0x95a5a6,
                 timestamp=datetime.utcnow()
             )
-        else:
-            embed = discord.Embed(
-                title="📋 Blacklist",
-                description="\n".join([f"• `{uid}`" for uid in userids]),
-                color=0xff0000,
-                timestamp=datetime.utcnow()
-            )
-            embed.set_footer(text=f"Total: {len(userids)} banned users")
+            await ctx.send(embed=embed)
+            return
+        
+        # Get usernames for all banned users
+        banned_users = []
+        
+        for userid in userids[:20]:  # Limit 20 first
+            try:
+                user_response = requests.get(f"https://users.roblox.com/v1/users/{userid}", timeout=3)
+                if user_response.status_code == 200:
+                    user_data = user_response.json()
+                    username = user_data.get('name', f"User {userid}")
+                else:
+                    username = f"Unknown ({userid})"
+            except:
+                username = f"Unknown ({userid})"
+            
+            banned_users.append(f"**{username}** (`{userid}`)")
+        
+        description = "\n".join(banned_users)
+        
+        if len(userids) > 20:
+            description += f"\n\n*...và {len(userids) - 20} người khác*"
+        
+        embed = discord.Embed(
+            title="📋 Blacklist",
+            description=description,
+            color=0xff0000,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_footer(text=f"Total: {len(userids)} banned users")
         
         await ctx.send(embed=embed)
         
     except Exception as e:
         await ctx.send(f"❌ Lỗi: {str(e)}")
+        print(f"❌ Banlist command error: {str(e)}")
 
 @bot.command()
 async def testgithub(ctx):
