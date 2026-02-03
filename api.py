@@ -11,9 +11,9 @@ GITHUB_REPO = os.getenv('GITHUB_REPO')
 def home():
     return "UTG Auth API is running!", 200
 
-@app.route('/blacklist', methods=['GET'])
+@app.route('/blacklist', methods=['GET', 'POST'])
 def get_blacklist():
-    """Get blacklist for Roblox"""
+    """Get blacklist - Support both GET and POST"""
     try:
         import time
         url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/blacklist.json?t={int(time.time())}"
@@ -35,18 +35,30 @@ def get_blacklist():
             "userids": []
         }), 500
 
-@app.route('/check/<userid>', methods=['GET'])
-def check_user(userid):
-    """Check if user is banned"""
+@app.route('/check', methods=['POST'])
+def check_user():
+    """Check if user is banned via POST"""
     try:
+        # Get userid from POST body
+        data = request.get_json()
+        userid = str(data.get('userid', ''))
+        
+        if not userid:
+            return jsonify({
+                "success": False,
+                "error": "No userid provided",
+                "banned": False
+            }), 400
+        
+        # Get blacklist
         import time
         url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/blacklist.json?t={int(time.time())}"
         
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         
-        data = json.loads(response.text)
-        userids = data.get('userids', [])
+        blacklist_data = json.loads(response.text)
+        userids = blacklist_data.get('userids', [])
         
         is_banned = userid in userids
         
